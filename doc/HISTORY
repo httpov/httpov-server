@@ -1,0 +1,11 @@
+0.7:
+====
+Added the ability to limit the number of clients working on the same job.
+(Requires client x.2)
+Corrected a bug in the abortbatch code.
+
+0.6:
+====
+Added the ability to group clients running on different machines, for
+statistical purposes.
+(Requires client x.1)

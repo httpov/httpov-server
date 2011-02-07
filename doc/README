@@ -1,0 +1,78 @@
+HTTPov server: Getting the jobs done
+
+The server has no web interface, and is controlled from within the MySQL
+client.
+
+
+
+The basic way of pointing out an animation job is:
+==================================================
+INSERT INTO job SET name='<jobname>', frames=<frames>, sliced=0,
+    rows=<imageheight>, count=<batchsize>, clients=<clients>, 
+    issued=UNIX_TIMESTAMP();
+
+<jobname> is the name of the zip file, excluding ".zip".
+
+<frames> is most likely the KFF number in the pov.ini file in the zip file.
+Some interesting effects can be acheived by letting them differ.
+
+<imageheight> should match +H in the pov.ini file.
+
+<count> is the number of frames that should be sent out in each batch; for
+very long animations consisting of very simple frames, a number larger
+than 1 could improve the performance. In cases where the frame rendering
+time is much larger than the HTTP communication time, 1 should be
+adequate.
+
+<clients> is the maximum number of clients that are allowed to process
+this job at the same time. 0 is unlimited.
+
+
+The basic way of pointing out a single image is:
+================================================
+INSERT INTO job SET name='<jobname>', frames=1, sliced=1,
+    rows=<imageheight>, count=<lines>, clients=<clients>,
+    issued=UNIX_TIMESTAMP();
+
+<imageheight> is the height of the image, as specified by H in the pov.ini
+file.
+
+<lines> is the number of lines that should be rendered in each batch.
+
+frames should be set to 1 in the database, and +KFF2 in pov.ini,
+because we want to trigger POV-Ray's handling of multiple files.
+
+<clients> is the maximum number of clients that are allowed to process
+this job at the same time. 0 is unlimited.
+
+
+
+The basic way of pointing out a sliced animation is:
+========================================================
+INSERT INTO job SET name='<jobname>', frames=<frames>, sliced=1,
+    rows=<imageheight>, count=<lines>, clients=<clients>,
+    issued=UNIX_TIMESTAMP();
+
+<jobname> is the name of the zip file, excluding ".zip".
+
+<frames> is most likely the KFF number in the pov.ini file in the zip file.
+Some interesting effects can be acheived by letting them differ.
+
+<imageheight> should match +H in the pov.ini file.
+
+<lines> is the number of lines that should be rendered in each batch.
+
+<clients> is the maximum number of clients that are allowed to process
+this job at the same time. 0 is unlimited.
+
+
+
+Aborting a running job:
+=======================
+UPDATE job SET aborted=NOW() where id=<jobid>;
+
+<jobid> is the id of the affected job. It may or may not be
+the last job, depending on whether there are queued jobs or not.
+
+The clients will continue working on their batches, but be denied to
+upload them when finished, and told to get a new job instead.

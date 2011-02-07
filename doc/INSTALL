@@ -1,0 +1,42 @@
+The file tree should be installed in this manner:
+=================================================
+  some_directory/
+    httpov/            <-- The server's document root
+      jobs/
+      httpov.php
+    safe_directory/
+    httpov_conf.php
+
+Make sure the server is allowed to write to safe_directory, as this is
+where all finished batches will be stored, out of reach for ordinary
+web clients. httpov_conf.php should also reside _outside_ the web root,
+as it contains database passwords.
+
+MySQL:
+======
+Using the mysql command line client should suffice to create the
+HTTPov database and associated tables:
+
+mysql -u<user> -p <httpov.sql
+
+Upgrading from server 0.6:
+==========================
+The new clients limit feature requires one additional column in
+the job and batch table each, but apart from that, upgrading 
+should be no more difficult than simply replacing httpov.php 
+with the new version.
+
+ALTER TABLE job ADD COLUMN clients int(11) NOT NULL;
+ALTER TABLE batch ADD COLUMN active int(11) NOT NULL;
+
+Use of x.2 clients is required for limiting to work.
+
+Upgrading from server 0.5:
+==========================
+The new client group feature requires one additional column in
+the batch table, but apart from that, upgrading should be no 
+more difficult than simply replacing httpov.php with the new
+version.
+
+ALTER TABLE batch ADD COLUMN cgroup varchar(50) NOT NULL;
+
