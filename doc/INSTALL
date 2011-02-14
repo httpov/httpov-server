@@ -12,6 +12,14 @@ where all finished batches will be stored, out of reach for ordinary
 web clients. httpov_conf.php should also reside _outside_ the web root,
 as it contains database passwords.
 
+PHP:
+====
+If the rendered images are produced for HD animations, their size can 
+easily outgrow the default PHP settings, causing the uploads to fail.
+
+Please make sure that 'upload_max_filesize' and 'post_max_size' in 
+php.ini are set to values that allow the entire batches to be uploaded.
+
 MySQL:
 ======
 Using the mysql command line client should suffice to create the
