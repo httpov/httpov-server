@@ -1,3 +1,8 @@
+0.8:
+====
+Added more fine-grained tracking abilities and support for the status
+viewer interface.
+
 0.7:
 ====
 Added the ability to limit the number of clients working on the same job.

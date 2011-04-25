@@ -13,9 +13,17 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
+$output_dir = "../safe_directory/";
+$use_gui = 1;
+$use_syslog = 1;
+
 require "../httpov_conf.php";
 
-$version = "0.7";
+if($use_syslog) {
+  openlog("httpov", LOG_PID | LOG_PERROR, LOG_LOCAL0);
+}
+
+$version = "0.8";
 $required_client = "0";
 $recommended_client = "2";
 
@@ -36,6 +44,32 @@ $db["link"] = mysql_connect ( $db["server"], $db["mortal"],
 
 $used_client = explode(".", $_GET["version"], 2);
 
+function log_state($state=NULL) {
+  global $use_gui;
+  if($use_gui) {
+    $tm     = date('Y-m-d H:i:s',time());
+    $ip     = mysql_real_escape_string(getenv('REMOTE_ADDR'));
+    $ver    = mysql_real_escape_string($_GET["version"]);
+    if($state === NULL) {
+      $cmd    = mysql_real_escape_string($_GET["command"]);
+    } else {
+      $cmd = $state;
+    }
+    $client = mysql_real_escape_string($_GET["client"]);
+
+    $query = "REPLACE INTO track(tm, ip, ver, cmd, client) VALUES ('$tm','$ip','$ver','$cmd','$client');";
+
+    mysql_query($query);
+  }
+}
+
+function hpsyslog($type, $data) {
+  global $use_syslog;
+  if($use_syslog) {
+    syslog($type, $data);
+  }
+}
+
 if(version_compare($used_client[1], $required_client, "<") || $used_client[0] === "0") {
   echo "command=sleep\n";
   echo "message=HTTPov client ".$used_client[0].".".$required_client." or later required.\n";
@@ -44,6 +78,8 @@ if(version_compare($used_client[1], $required_client, "<") || $used_client[0] ==
 }
 
 mysql_select_db ( $db["db"], $db["link"] );
+
+log_state();
 
 switch ($_GET["command"]) {
   case "hello":
@@ -81,9 +117,11 @@ switch ($_GET["command"]) {
         echo "frames=".$row["frames"]."\n";
       } else {
         echo "command=sleep\n";
+        log_state("sleep");
       }
     } else {
       echo "command=sleep\n";
+      log_state("sleep");
     }
     if(version_compare($used_client[1], $recommended_client, "<")) {
       echo "message=HTTPov client ".$used_client[0].".".$recommended_client." or later recommended.\n";
@@ -158,7 +196,7 @@ switch ($_GET["command"]) {
                                      // instead of the job slice counter,
                                      // as that is wrong now.
 
-            if(file_exists($_SERVER["DOCUMENT_ROOT"]."/../safe_directory/".
+            if(file_exists($_SERVER["DOCUMENT_ROOT"].$output_dir.
                            $row["name"]."/".$row["name"]."_frame_".
                            (str_pad($row2["frame"], 8, "0", STR_PAD_LEFT)).
                            ($row["sliced"]?("_".str_pad($row2["slice"], 4, "0", STR_PAD_LEFT)):"").
@@ -242,7 +280,7 @@ switch ($_GET["command"]) {
             if(mysql_num_rows($result2)) {
               $row2 = mysql_fetch_array($result2);
 
-              if(file_exists($_SERVER["DOCUMENT_ROOT"]."/../safe_directory/".
+              if(file_exists($_SERVER["DOCUMENT_ROOT"].$output_dir.
                              $row["name"]."/".$row["name"]."_frame_".
                              (str_pad($row2["frame"], 8, "0", STR_PAD_LEFT)).
                              ".zip")) {
@@ -321,6 +359,7 @@ switch ($_GET["command"]) {
         } else {
           echo "command=sleep\n";
           // echo "message=batchloopsleep\n";
+          log_state("sleep");
         }
       } else {
 	//        echo "command=sleep\n";
@@ -347,15 +386,15 @@ switch ($_GET["command"]) {
         $result = mysql_query($sql);
         $row = mysql_fetch_array($result);
         $name = $row["name"];
-        if(!file_exists($_SERVER["DOCUMENT_ROOT"]."/../safe_directory/".
+        if(!file_exists($_SERVER["DOCUMENT_ROOT"].$output_dir.
                         $row["name"])) {
-          mkdir($_SERVER["DOCUMENT_ROOT"]."/../safe_directory/".$name);
+          mkdir($_SERVER["DOCUMENT_ROOT"].$output_dir.$name);
         }
-        if(!file_exists($_SERVER["DOCUMENT_ROOT"]."/../safe_directory/".
+        if(!file_exists($_SERVER["DOCUMENT_ROOT"].$output_dir.
                         $name."/".$_FILES["filedata"]["name"])) {
           if(!$_FILES["filedata"]["error"]) {
             move_uploaded_file($_FILES["filedata"]["tmp_name"], 
-                               $_SERVER["DOCUMENT_ROOT"]."/../safe_directory/".
+                               $_SERVER["DOCUMENT_ROOT"].$output_dir.
                                $name."/".$_FILES["filedata"]["name"]);
           }
           if($_FILES["filedata"]["error"] == 0) {
@@ -365,6 +404,7 @@ switch ($_GET["command"]) {
             echo "status=ok\n";
           } else {
             $error = 1;
+            hpsyslog(LOG_WARNING, "postbatch filedata error == " . $_FILES["filedata"]["error"]);
           }
         } else {
           $sql = "update batch set finished=issued, ".
@@ -374,9 +414,11 @@ switch ($_GET["command"]) {
         }
       } else {
         $error = 1;
+        hpsyslog(LOG_WARNING, "postbatch filedata not set");
       }
     } else {
       $error = 1;
+      hpsyslog(LOG_WARNING, "postbatch no such batch");
     }
 
     if($error) {
@@ -398,6 +440,8 @@ switch ($_GET["command"]) {
              "cid='".$client[1]."'";
       $result = mysql_query($sql);
     }
+  break;
+  case "abort":
   break;
   case "active":
     if(array_key_exists("batch", $_GET) && array_key_exists("batch", $_GET)) {
