@@ -19,11 +19,19 @@ $use_syslog = 1;
 
 require "../httpov_conf.php";
 
+$upload_err[UPLOAD_ERR_INI_SIZE] = "File larger than upload_max_filesize";
+$upload_err[UPLOAD_ERR_FORM_SIZE] = "File larger than form MAX_FILE_SIZE";
+$upload_err[UPLOAD_ERR_PARTIAL] = "Partial file";
+$upload_err[UPLOAD_ERR_NO_FILE] = "No file uploaded";
+$upload_err[UPLOAD_ERR_NO_TMP_DIR] = "No temp dir";
+$upload_err[UPLOAD_ERR_CANT_WRITE] = "Can not write file";
+$upload_err[UPLOAD_ERR_EXTENSION] = "Upload stopped by unknown PHP extension";
+
 if($use_syslog) {
   openlog("httpov", LOG_PID | LOG_PERROR, LOG_LOCAL0);
 }
 
-$version = "0.8";
+$version = "0.9";
 $required_client = "0";
 $recommended_client = "2";
 
@@ -42,7 +50,11 @@ $db["link"] = mysql_connect ( $db["server"], $db["mortal"],
 // Bug fixes that does not introduce new features will be indicated
 // by a third digit.
 
-$used_client = explode(".", $_GET["version"], 2);
+if(array_key_exists("version", $_GET)) {
+  $used_client = explode(".", $_GET["version"], 2);
+} else {
+  $used_client = array("0", "0");
+}
 
 function log_state($state=NULL) {
   global $use_gui;
@@ -72,7 +84,11 @@ function hpsyslog($type, $data) {
 
 if(version_compare($used_client[1], $required_client, "<") || $used_client[0] === "0") {
   echo "command=sleep\n";
-  echo "message=HTTPov client ".$used_client[0].".".$required_client." or later required.\n";
+  if($used_client[0] === "0") {
+    echo "message=HTTPov client 0.x is no longer supported. Please update to a later version.\n";
+  } else {
+    echo "message=HTTPov client ".$used_client[0].".".$required_client." or later required.\n";
+  }
   //echo "message=Just messing around, no new client available.\n";
   die();
 }
@@ -161,15 +177,71 @@ switch ($_GET["command"]) {
       $result = mysql_query($sql);
       $row = mysql_fetch_array($result);
 
-      $startframe = $row["current"];
+      if($row["sliced"]) {
+        if($row["lastbatch"] < $row["rows"] && $row["lastbatch"] != 0) {
+          $job_lastbatch = $row["lastbatch"];
+hpsyslog(LOG_WARNING, "lastbatch set to ".$job_lastbatch);
+        } else {
+          $job_lastbatch = $row["rows"];
+hpsyslog(LOG_WARNING, "lastbatch limited to ".$job_lastbatch);
+        }
+
+        $job_firstbatch = $row["firstbatch"];
+        $job_frames = $row["frames"];
+        $job_current = $row["current"];
+
+      } else {
+        if($row["lastbatch"] < $row["frames"]) {
+          $job_lastbatch = $row["lastbatch"];
+        } else {
+          $job_lastbatch = $row["frames"] - 1;
+        }
+
+        // if this is a range rendering, calculate ranges
+        if($job_lastbatch > 0 && $job_lastbatch >= $row["firstbatch"]) {
+          $job_frames = 1 + $job_lastbatch - $row["firstbatch"];
+          $job_firstbatch = $row["firstbatch"];
+        } else {
+          $job_frames = $row["frames"];
+          $job_firstbatch = 0;
+        }
+
+        // if this is the first batch and firstbatch is
+        // larger than 0, set current to firstbatch
+        if(!$row["current"] && $job_firstbatch) {
+          $job_current = $job_firstbatch;
+        } else {
+          $job_current = $row["current"];
+        }
+      }
+
+      $startframe = $job_current;
+
+      $job_endframe = $job_frames + $job_firstbatch;
 
 // Todo:
 // Unify the sliced/unsliced code.
 
       if($row["sliced"]) {
+
+        // if this is the first batch and firstbatch is
+        // larger than 0, set slice to firstbatch
+hpsyslog(LOG_WARNING, "slice and firstbatch: ".$row["slice"]." ".$job_firstbatch);
+        if(!$row["slice"] && $job_firstbatch) {
+          $job_slice = $job_firstbatch;
+hpsyslog(LOG_WARNING, "setting slice to ".$job_slice);
+        } else {
+          $job_slice = $row["slice"];
+hpsyslog(LOG_WARNING, "using existing slice number ".$job_slice);
+        }
+
+        if(!$row["slice"]) {
+hpsyslog(LOG_WARNING, "startframe current frames job_slice count job_lastbatch ".$startframe." ".$row["current"]." ".$row["frames"]." ".$job_slice." ".$row["count"]." ".$job_lastbatch);
+        }
+
         $stopframe = $startframe;
         if(($row["current"] + 1 ) == $row["frames"] &&
-           ($row["slice"] * $row["count"] + 1) > $row["rows"]) {
+           ($job_slice * $row["count"] + 1) > $job_lastbatch) {
 
           // The last batch has been issued.
           // (We're on the last frame, and the start of
@@ -183,7 +255,7 @@ switch ($_GET["command"]) {
 	  // * If the number of clients exceed the number of unfinished
 	  // or aborted batches.
 
-          $slice = $row["slice"];
+          $slice = $job_slice;
 
           $sql2 = "select * from batch where job='".$job."'".
                   " and finished='0' limit 1";
@@ -240,29 +312,29 @@ switch ($_GET["command"]) {
           // there are plenty of batches left
           // just issue one
 
-          $startrow = $row["slice"] * $row["count"] + 1;
-          $endrow = ($row["slice"] + 1) * $row["count"];
-          if($endrow >= $row["rows"]) {
-            $endrow = $row["rows"];
+          $startrow = $job_slice * $row["count"] + 1;
+          $endrow = ($job_slice + 1) * $row["count"];
+          if($endrow >= $job_lastbatch) {
+            $endrow = $job_lastbatch;
             if(($row["current"]+1) != $row["frames"]) {
-              $slice = $row["slice"];//0;
+              $slice = $job_slice;//0;
               $sql = "update job set current='".($row["current"]+1).
                      "', slice=0, locked=0 where id='".$job."'";
             } else {
-              $slice = $row["slice"];// + 1;
-              $sql = "update job set slice='".($row["slice"] + 1).
+              $slice = $job_slice;// + 1;
+              $sql = "update job set slice='".($job_slice + 1).
                      "', locked=0 where id='".$job."'";
             }
           } else {
-            $slice = $row["slice"];// + 1;
-            $sql = "update job set slice='".($row["slice"] + 1).
+            $slice = $job_slice;// + 1;
+            $sql = "update job set slice='".($job_slice + 1).
                    "', locked=0 where id='".$job."'";
           }
         }
       } else {
-        if(($row["current"] + $row["count"]) >= $row["frames"]) {
+	if($job_current + $row["count"] >= $job_endframe) {
           // We have reached the last batch
-          if($row["current"] == $row["frames"]) {
+          if($job_current == $job_endframe) {
 
             // The last batch has been issued.
             // Look for the first unfinished batch (which may be the last
@@ -318,16 +390,17 @@ switch ($_GET["command"]) {
           } else {
             // there is just one batch left
             // take care not to overshoot current
-            $stopframe = $row["frames"] - 1;
-            $sql = "update job set current='".($row["frames"]).
+            $stopframe = $job_endframe - 1;
+            $sql = "update job set current='".($job_endframe).
                    "', locked=0 where id='".$job."'";
           }
         } else {
           // current has not yet reached frames
           // there are plenty of batches left
           // just issue one
-          $stopframe = $row["current"] + ($row["count"] - 1);
-          $sql = "update job set current='".($row["current"]+$row["count"]).
+
+          $stopframe = $job_current + ($row["count"] - 1);
+          $sql = "update job set current='".($job_current + $row["count"]).
                  "', locked=0 where id='".$job."'";
         }
       }
@@ -404,7 +477,7 @@ switch ($_GET["command"]) {
             echo "status=ok\n";
           } else {
             $error = 1;
-            hpsyslog(LOG_WARNING, "postbatch filedata error == " . $_FILES["filedata"]["error"]);
+            hpsyslog(LOG_WARNING, "postbatch filedata error == " . $_FILES["filedata"]["error"] . ": " . $upload_err[$_FILES["filedata"]["error"]]);
           }
         } else {
           $sql = "update batch set finished=issued, ".
@@ -414,7 +487,7 @@ switch ($_GET["command"]) {
         }
       } else {
         $error = 1;
-        hpsyslog(LOG_WARNING, "postbatch filedata not set");
+        hpsyslog(LOG_WARNING, "postbatch filedata not set (post_max_size exceeded?)");
       }
     } else {
       $error = 1;

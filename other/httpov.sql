@@ -68,6 +68,8 @@ CREATE TABLE `job` (
   `finished` int(11) NOT NULL,
   `aborted` int(11) NOT NULL,
   `locked` int(11) NOT NULL,
+  `firstbatch` int(11) NOT NULL,
+  `lastbatch` int(11) NOT NULL,
   PRIMARY KEY  (`id`)
 ) ENGINE=MyISAM AUTO_INCREMENT=1 DEFAULT CHARSET=latin1;
 SET character_set_client = @saved_cs_client;

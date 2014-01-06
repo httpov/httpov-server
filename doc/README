@@ -67,6 +67,48 @@ this job at the same time. 0 is unlimited.
 
 
 
+Examples of full and partial jobs:
+==================================
+Full image:
+  Unsliced:
+    INSERT INTO job SET name='quickslicetest', frames=1, sliced=0, rows=480, 
+           count=1, issued=UNIX_TIMESTAMP();
+    Render the image, all lines in one batch.
+  Sliced:
+    INSERT INTO job SET name='quickslicetest', frames=1, sliced=1, rows=480, 
+           count=1, issued=UNIX_TIMESTAMP();
+    Render the image in count lines per batch.
+
+Partial image:
+  Unsliced:
+    Not applicable.
+  Sliced:
+    INSERT INTO job SET name='quickslicetest', frames=1, sliced=1, rows=480, 
+           count=1, firstbatch=120, lastbatch=130, issued=UNIX_TIMESTAMP();
+    Render line 120-129, in count lines per batch.
+
+Full animation:
+  Unsliced:
+    INSERT INTO job SET name='animslicetest', frames=25, sliced=0, rows=480, 
+           count=1, issued=UNIX_TIMESTAMP();
+    Render all frames, count frames per batch.
+  Sliced:
+    INSERT INTO job SET name='animslicetest', frames=25, sliced=1, rows=480, 
+           count=1, issued=UNIX_TIMESTAMP();
+    Render all frames in count lines per batch.
+
+Partial animation:
+  Unsliced:
+    INSERT INTO job SET name='animslicetest', frames=25, sliced=0, rows=480, 
+           count=1, firstbatch=5, lastbatch=10, issued=UNIX_TIMESTAMP();
+    Render frame 5 to 10, count frames per batch.
+  Sliced:
+    INSERT INTO job SET name='animslicetest', frames=25, sliced=1, rows=480, 
+           count=1, firstbatch=5, lastbatch=10, issued=UNIX_TIMESTAMP();
+    Render all frames, line 5 to 9, in count lines per batch.
+
+
+
 Aborting a running job:
 =======================
 UPDATE job SET aborted=NOW() where id=<jobid>;

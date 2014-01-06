@@ -27,24 +27,12 @@ HTTPov database and associated tables:
 
 mysql -u<user> -p <httpov.sql
 
-Upgrading from server 0.6:
+Upgrading from server 0.8:
 ==========================
-The new clients limit feature requires one additional column in
-the job and batch table each, but apart from that, upgrading 
+The partial rendering feature requires two additional columns in
+the job table, but apart from that, upgrading 
 should be no more difficult than simply replacing httpov.php 
 with the new version.
 
-ALTER TABLE job ADD COLUMN clients int(11) NOT NULL;
-ALTER TABLE batch ADD COLUMN active int(11) NOT NULL;
-
-Use of x.2 clients is required for limiting to work.
-
-Upgrading from server 0.5:
-==========================
-The new client group feature requires one additional column in
-the batch table, but apart from that, upgrading should be no 
-more difficult than simply replacing httpov.php with the new
-version.
-
-ALTER TABLE batch ADD COLUMN cgroup varchar(50) NOT NULL;
-
+ALTER TABLE job ADD COLUMN firstbatch int(11) NOT NULL;
+ALTER TABLE job ADD COLUMN lastbatch int(11) NOT NULL;

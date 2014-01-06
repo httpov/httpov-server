@@ -1,3 +1,11 @@
+0.9:
+====
+Added more detailed upload error handling.
+Bumped version to 0.9.
+Client version detection improved.
+Added support for partial jobs; partial animations and partial slice rendering.
+Changed database format to support partial rendering.
+
 0.8:
 ====
 Added more fine-grained tracking abilities and support for the status
